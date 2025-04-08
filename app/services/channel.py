@@ -1,3 +1,4 @@
+import base64
 import httpx
 from typing import List, Dict
 from ..utils import get_youtube_api_key, get_context
@@ -15,7 +16,8 @@ def extract_video_items(items: List[Dict]) -> List[Dict]:
             "url": f"https://www.youtube.com/watch?v={video.get('videoId')}",
             "duration": video.get("lengthText", {}).get("simpleText", ""),
             "views": video.get("viewCountText", {}).get("simpleText", ""),
-            "channel": video.get("ownerText", {}).get("runs", [{}])[0].get("text", ""),
+            "thumbnail": video.get("thumbnail", {}).get("thumbnails", []),
+            "public": video.get("publishedTimeText", {}).get("simpleText", ""),
         })
     return videos
 
@@ -32,8 +34,15 @@ async def get_channel_videos(channel_id: str, proxy: str = None, max_results: in
     collected = []
     continuation = None
 
+    encoded = "EgZ2aWRlb3M"
+    missing_padding = len(encoded) % 4
+    if missing_padding:
+        encoded += "=" * (4 - missing_padding)
+
+    decoded = base64.b64decode(encoded).decode("utf-8")
+
     async with httpx.AsyncClient(proxies=proxy, headers=headers, timeout=15) as client:
-        payload = {"context": get_context(), "browseId": channel_id}
+        payload = {"context": get_context(), "browseId": channel_id, "params": decoded}
         resp = await client.post(BROWSE_URL, json=payload)
         resp.raise_for_status()
         data = resp.json()
@@ -57,6 +66,7 @@ async def get_channel_videos(channel_id: str, proxy: str = None, max_results: in
             tabs = data.get("contents", {}).get("twoColumnBrowseResultsRenderer", {}).get("tabs", [])
             videos_tab = next((tab for tab in tabs if tab.get("tabRenderer", {}).get("title", "").lower() == "videos"), None)
 
+
         if not videos_tab:
             videos_tab = next((tab for tab in tabs if tab.get("tabRenderer", {}).get("title", "").lower() == "home"), None)
             if not videos_tab:
@@ -71,14 +81,14 @@ async def get_channel_videos(channel_id: str, proxy: str = None, max_results: in
             c.get("continuationItemRenderer", {}).get("continuationEndpoint", {}).get("continuationCommand", {}).get("token")
             for c in section if "continuationItemRenderer" in c
         ), None)
-
+    
         while continuation and len(collected) < max_results:
             payload = {"context": get_context(), "continuation": continuation}
             resp = await client.post(BROWSE_URL, json=payload)
             resp.raise_for_status()
             data = resp.json()
 
-            commands = data.get("onResponseReceivedCommands", [])
+            commands = data.get("onResponseReceivedCommands") or data.get("onResponseReceivedActions") or []
             if not commands:
                 break
 
@@ -91,6 +101,5 @@ async def get_channel_videos(channel_id: str, proxy: str = None, max_results: in
                 for i in continuation_items if "continuationItemRenderer" in i
             ), None)
 
-            print(f"[+] Fetched: {len(collected)} | Next: {bool(continuation)}")
 
     return collected[:max_results]

@@ -1,5 +1,6 @@
 import re
 import httpx
+import json
 
 async def get_youtube_api_key() -> str:
     async with httpx.AsyncClient() as client:
@@ -34,3 +35,7 @@ async def resolve_channel_id_from_handle(handle: str) -> str:
             return match.group(1)
 
         raise Exception("Channel_id not found")
+
+def save_to_json(data, filename="debug.json"):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)

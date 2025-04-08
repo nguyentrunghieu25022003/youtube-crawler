@@ -1,5 +1,4 @@
 import httpx
-import json
 from typing import List, Dict
 from ..utils import get_youtube_api_key
 
@@ -118,24 +117,32 @@ async def get_playlist_videos(channel_id: str, proxy: str = None) -> List[Dict]:
                               .get("url", "")
                     )
                     
+                    import json
+                    with open("playlist_error_dump.json", "w", encoding="utf-8") as f:
+                        json.dump(lockup, f, ensure_ascii=False, indent=2)
+                    videoCount = ""
+                    
+                    overlays = (
+                        lockup.get("contentImage", {})
+                              .get("collectionThumbnailViewModel", {})
+                              .get("primaryThumbnail", {})
+                              .get("thumbnailViewModel", {})
+                              .get("overlays", [])
+                    )
+
+                    for overlay in overlays:
+                        badge = overlay.get("thumbnailOverlayBadgeViewModel", {}).get("thumbnailBadges", [])
+                        if badge:
+                            videoCount = badge[0].get("thumbnailBadgeViewModel", {}).get("text", "")
+                            if videoCount:
+                                break
+                    
                     title = (
                         lockup.get("metadata", {})
                             .get("lockupMetadataViewModel", {})
                             .get("title", {})
                             .get("content", "")
                     )
-
-                    video_count = ""
-                    overlays = grid_item.get("overlays", [])
-                    for overlay in overlays:
-                        badges = overlay.get("thumbnailOverlayBadgeViewModel", {}).get("thumbnailBadges", []).get("thumbnailBadgeViewModel", {})
-                        for badge in badges:
-                            text = badge.get("text", "")
-                            if text:
-                                video_count = text
-                                break
-                        if video_count:
-                            break
                         
                     playlist_id = (
                         lockup.get("rendererContext", {})
@@ -150,7 +157,7 @@ async def get_playlist_videos(channel_id: str, proxy: str = None) -> List[Dict]:
                         "playlistId": playlist_id,
                         "title": title,
                         "thumbnail": thumbnail_url,
-                        "videoCount": video_count,
+                        "videoCount": videoCount
                     })
 
         return playlists
@@ -178,9 +185,6 @@ async def get_videos_from_playlist(playlist_id: str, proxy: str = None) -> List[
             data = resp.json()
 
             if "contents" not in data:
-                import json
-                with open("playlist_error_dump.json", "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
                 raise Exception("Invalid response structure")
 
             try:

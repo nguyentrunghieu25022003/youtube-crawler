@@ -22,6 +22,14 @@ async def get_video_detail(video_id: str, proxy: str = None):
         resp.raise_for_status()
         data = resp.json()
 
+        status = data.get("playabilityStatus", {})
+        if status.get("status") != "OK":
+            return {
+                "error": True,
+                "reason": status.get("reason", "Unavailable"),
+                "status": status.get("status")
+            }
+
         video_details = data.get("videoDetails", {})
         streaming_data = data.get("streamingData", {})
         
