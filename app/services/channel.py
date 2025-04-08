@@ -22,7 +22,6 @@ def extract_video_items(items: List[Dict]) -> List[Dict]:
 async def get_channel_videos(channel_id: str, proxy: str = None, max_results: int = 100) -> List[Dict]:
     API_KEY = await get_youtube_api_key()
     BROWSE_URL = f"https://www.youtube.com/youtubei/v1/browse?key={API_KEY}"
-
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0",
@@ -34,11 +33,7 @@ async def get_channel_videos(channel_id: str, proxy: str = None, max_results: in
     continuation = None
 
     async with httpx.AsyncClient(proxies=proxy, headers=headers, timeout=15) as client:
-        payload = {
-            "context": get_context(),
-            "browseId": channel_id
-        }
-
+        payload = {"context": get_context(), "browseId": channel_id}
         resp = await client.post(BROWSE_URL, json=payload)
         resp.raise_for_status()
         data = resp.json()
@@ -47,44 +42,29 @@ async def get_channel_videos(channel_id: str, proxy: str = None, max_results: in
         if not tabs:
             raise Exception("'Tabs' not found")
 
-        videos_browse_id = None
-        videos_params = None
-        for tab in tabs:
-            tab_renderer = tab.get("tabRenderer", {})
-            if tab_renderer.get("title", "").lower() == "videos":
-                endpoint = tab_renderer.get("endpoint", {}).get("browseEndpoint", {})
-                videos_browse_id = endpoint.get("browseId")
-                videos_params = endpoint.get("params")
-                break
+        videos_tab = next((tab for tab in tabs if tab.get("tabRenderer", {}).get("title", "").lower() == "videos"), None)
+        
+        if videos_tab:
+            endpoint = videos_tab.get("tabRenderer", {}).get("endpoint", {}).get("browseEndpoint", {})
+            browse_id = endpoint.get("browseId")
+            params = endpoint.get("params")
 
-        if not videos_browse_id:
-            raise Exception("'Videos' not found")
+            payload = {"context": get_context(), "browseId": browse_id, "params": params}
+            resp = await client.post(BROWSE_URL, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
 
-        payload = {
-            "context": get_context(),
-            "browseId": videos_browse_id,
-            "params": videos_params
-        }
+            tabs = data.get("contents", {}).get("twoColumnBrowseResultsRenderer", {}).get("tabs", [])
+            videos_tab = next((tab for tab in tabs if tab.get("tabRenderer", {}).get("title", "").lower() == "videos"), None)
 
-        resp = await client.post(BROWSE_URL, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+        if not videos_tab:
+            videos_tab = next((tab for tab in tabs if tab.get("tabRenderer", {}).get("title", "").lower() == "home"), None)
+            if not videos_tab:
+                raise Exception("Videos or Home not found")
 
-        tabs = data.get("contents", {}).get("twoColumnBrowseResultsRenderer", {}).get("tabs", [])
-        if not tabs:
-            raise Exception("Tabs not found on tab Videos.")
-
-        section = []
-        for tab in tabs:
-            tab_renderer = tab.get("tabRenderer", {})
-            if tab_renderer.get("title", "").lower() == "videos":
-                section = tab_renderer.get("content", {}) \
-                    .get("richGridRenderer", {}) \
-                    .get("contents", [])
-                break
-
-        if not section:
-            raise Exception("Video list not found on tab Videos.")
+        section = videos_tab.get("tabRenderer", {}).get("content", {}) \
+                            .get("richGridRenderer", {}) \
+                            .get("contents", [])
 
         collected += extract_video_items(section)
         continuation = next((
@@ -92,14 +72,8 @@ async def get_channel_videos(channel_id: str, proxy: str = None, max_results: in
             for c in section if "continuationItemRenderer" in c
         ), None)
 
-        print(f"[Init] Fetched: {len(collected)} | Continuation: {bool(continuation)}")
-
         while continuation and len(collected) < max_results:
-            payload = {
-                "context": get_context(),
-                "continuation": continuation
-            }
-
+            payload = {"context": get_context(), "continuation": continuation}
             resp = await client.post(BROWSE_URL, json=payload)
             resp.raise_for_status()
             data = resp.json()

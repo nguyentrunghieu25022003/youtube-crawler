@@ -2,14 +2,15 @@ from fastapi import APIRouter, HTTPException, Query
 from app.services.search import search_youtube
 from app.services.detail import get_video_detail
 from app.services.channel import get_channel_videos
-from app.services.playlist import get_playlist_videos
+from app.services.channel_info import get_channel_info
+from app.services.playlist import get_playlist_videos, get_videos_from_playlist
+from app.services.comment import get_video_comments
 from app.utils import resolve_channel_id_from_handle
 
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
 router = APIRouter()
 
 PROXY_HOST = os.getenv("PROXY_HOST")
@@ -18,6 +19,7 @@ PROXY_USER = os.getenv("PROXY_USER")
 PROXY_PASS = os.getenv("PROXY_PASS")
 
 PROXY_URL = f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
+
 
 @router.get("/search")
 async def search_videos(
@@ -29,7 +31,6 @@ async def search_videos(
     try:
         start = (page - 1) * limit
         max_fetch = start + limit
-    
         results = await search_youtube(q, max_results=max_fetch, sort=sort, proxy=PROXY_URL)
         return {
             "query": q,
@@ -41,7 +42,7 @@ async def search_videos(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/video/{video_id}")
+@router.get("/videos/{video_id}")
 async def video_detail(video_id: str):
     try:
         results = await get_video_detail(video_id, proxy=PROXY_URL)
@@ -49,11 +50,11 @@ async def video_detail(video_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/channel/{channel_input}")
+@router.get("/channel/{channel_input}/videos")
 async def video_channel(
-    channel_input: str, 
-    page: int = Query(1, ge=1), 
-    limit: int = Query(30, ge=1, le=50)
+    channel_input: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(30, ge=1, le=50),
 ):
     try:
         if channel_input.startswith("@"):
@@ -63,8 +64,8 @@ async def video_channel(
 
         start = (page - 1) * limit
         max_fetch = start + limit
-        
         videos = await get_channel_videos(channel_id=channel_id, max_results=max_fetch, proxy=PROXY_URL)
+
         return {
             "channel_id": channel_id,
             "video_count": len(videos),
@@ -72,11 +73,39 @@ async def video_channel(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-@router.get("/api/channel/{channel_id}/playlists")
-async def get_playlists(channel_id: str):
+
+@router.get("/channel/{channel_id}")
+async def channel_info(channel_id: str):
+    try:
+        info = await get_channel_info(channel_id, proxy=PROXY_URL)
+        return info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/channel/{channel_id}/playlist")
+async def get_channel_playlists(channel_id: str):
     try:
         playlists = await get_playlist_videos(channel_id, proxy=PROXY_URL)
         return playlists
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/playlist/{playlist_id}/videos")
+async def get_videos_from_a_playlist(playlist_id: str):
+    try:
+        videos = await get_videos_from_playlist(playlist_id, proxy=PROXY_URL)
+        return videos
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/video/{video_id}/comments")
+async def get_comments(video_id: str, max_comments: int = 100):
+    try:
+        comments = await get_video_comments(video_id, proxy=PROXY_URL, max_comments=max_comments)
+        return {
+            "video_id": video_id,
+            "total": len(comments),
+            "comments": comments
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
