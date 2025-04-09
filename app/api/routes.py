@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from app.services.search import search_youtube
 from app.services.detail import get_video_detail
@@ -7,6 +8,7 @@ from app.services.playlist import get_playlist_videos, get_videos_from_playlist
 from app.services.comment import get_video_comments
 from app.services.live import get_all_live_videos
 from app.services.trending import get_trending_videos
+from app.services.location import generate_grid_locations, get_videos_by_location
 from app.utils import resolve_channel_id_from_handle
 
 import os
@@ -152,7 +154,41 @@ async def get__videos_trending(
         max_fetch = start + limit
         videos = await get_trending_videos(proxy=PROXY_URL, max_results=max_fetch)
         return {
+            "total": len(videos),
             "videos": videos
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/location/videos")
+async def get_location_videos(
+    lat: float = Query(..., description="Latitude"),
+    lng: float = Query(..., description="Longitude"),
+    radius_km: int = Query(50, ge=1, le=500, description="Total search radius (km) around location"),
+    step_km: int = Query(10, ge=1, le=100, description="Distance between each point in the grid (km)"),
+    per_location_limit: int = Query(20, ge=1, le=50, description="Maximum number of videos per coordinate"),
+):
+    try:
+        grid_locations = generate_grid_locations(center_lat=lat, center_lng=lng, step_km=step_km, radius_km=radius_km)
+
+        tasks = [
+            get_videos_by_location(location=loc, radius=f"{step_km}km", max_results=per_location_limit)
+            for loc in grid_locations
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+        unique = {}
+        for video_list in results:
+            for video in video_list:
+                unique[video["videoId"]] = video
+
+        return {
+            "center": f"{lat},{lng}",
+            "locations_scanned": len(grid_locations),
+            "total_unique_videos": len(unique),
+            "videos": list(unique.values())
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
