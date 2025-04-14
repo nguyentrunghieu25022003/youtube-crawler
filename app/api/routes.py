@@ -24,7 +24,6 @@ PROXY_PASS = os.getenv("PROXY_PASS")
 
 PROXY_URL = f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
 
-
 @router.get("/search")
 async def search_videos(
     q: str = Query(...),
@@ -152,16 +151,16 @@ async def get__videos_trending(
     try:
         start = (page - 1) * limit
         max_fetch = start + limit
-        videos = await get_trending_videos(proxy=PROXY_URL, max_results=max_fetch)
+        videos = await get_trending_videos(proxy=PROXY_URL, max_results=max_fetch, filter_params="EgZtdXNpYw%3D%3D")
+        
         return {
-            "total": len(videos),
-            "videos": videos
+            "videos": videos[start:start + limit]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/location/videos")
-async def get_location_videos(
+async def get_videos_location(
     lat: float = Query(..., description="Latitude"),
     lng: float = Query(..., description="Longitude"),
     radius_km: int = Query(50, ge=1, le=500, description="Total search radius (km) around location"),

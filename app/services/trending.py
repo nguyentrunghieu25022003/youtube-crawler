@@ -1,6 +1,6 @@
 import json
 import httpx
-from typing import List, Dict
+from typing import List, Dict, Optional
 from ..utils import get_youtube_api_key, get_context
 
 def extract_videos(items: List[Dict]) -> List[Dict]:
@@ -21,18 +21,23 @@ def extract_videos(items: List[Dict]) -> List[Dict]:
 
 def extract_videos_from_item(item: Dict) -> List[Dict]:
     if "carouselRenderer" in item:
-        carousel = item["carouselRenderer"]
-        return extract_videos(carousel.get("contents", []))
-    
+        return extract_videos(item["carouselRenderer"].get("contents", []))
     elif "shelfRenderer" in item:
-        shelf = item["shelfRenderer"]
-        items = shelf.get("content", {}) \
-                     .get("expandedShelfContentsRenderer", {}) \
-                     .get("items", [])
-        return extract_videos(items)
+        return extract_videos(item["shelfRenderer"]
+                              .get("content", {})
+                              .get("expandedShelfContentsRenderer", {})
+                              .get("items", []))
+    elif "richSectionRenderer" in item:
+        content = item["richSectionRenderer"].get("content", {})
+        if "richShelfRenderer" in content:
+            return extract_videos(content["richShelfRenderer"].get("contents", []))
     return []
 
-async def get_trending_videos(proxy: str = None, max_results: int = 100) -> List[Dict]:
+async def get_trending_videos(
+    proxy: Optional[str] = None,
+    max_results: int = 100,
+    filter_params: Optional[str] = None
+) -> List[Dict]:
     API_KEY = await get_youtube_api_key()
     BROWSE_URL = f"https://www.youtube.com/youtubei/v1/browse?key={API_KEY}"
 
@@ -43,17 +48,18 @@ async def get_trending_videos(proxy: str = None, max_results: int = 100) -> List
         "Referer": "https://www.youtube.com"
     }
 
-    collected = []
-    continuation = None
+    collected: List[Dict] = []
+    continuation: Optional[str] = None
 
     async with httpx.AsyncClient(proxies=proxy, headers=headers, timeout=15) as client:
+        # Initial request
         payload = {"context": get_context(), "browseId": "FEtrending"}
+        if filter_params:
+            payload["params"] = filter_params
+
         resp = await client.post(BROWSE_URL, json=payload)
         resp.raise_for_status()
         data = resp.json()
-
-        with open("debug_trending_first.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
 
         renderers = data.get("contents", {}) \
                         .get("twoColumnBrowseResultsRenderer", {}) \
@@ -66,14 +72,21 @@ async def get_trending_videos(proxy: str = None, max_results: int = 100) -> List
         for section in renderers:
             items = section.get("itemSectionRenderer", {}).get("contents", [])
             for item in items:
-                videos = extract_videos_from_item(item)
-                if videos:
-                    collected += videos
-                    if "carouselRenderer" in item:
-                        continuation = item["carouselRenderer"].get("continuations", [{}])[0] \
-                                          .get("nextContinuationData", {}) \
-                                          .get("continuation")
-                                          
+                collected += extract_videos_from_item(item)
+                if len(collected) >= max_results:
+                    return collected[:max_results]
+
+            # Continuation token sau trang đầu
+            continuation = next(
+                (section.get("continuationItemRenderer", {})
+                        .get("continuationEndpoint", {})
+                        .get("continuationCommand", {})
+                        .get("token")
+                 for section in renderers if "continuationItemRenderer" in section),
+                None
+            )
+
+        # Pagination
         while continuation and len(collected) < max_results:
             payload = {"context": get_context(), "continuation": continuation}
             resp = await client.post(BROWSE_URL, json=payload)
@@ -83,13 +96,23 @@ async def get_trending_videos(proxy: str = None, max_results: int = 100) -> List
             items = data.get("onResponseReceivedActions", [{}])[0] \
                         .get("appendContinuationItemsAction", {}) \
                         .get("continuationItems", [])
-            collected += extract_videos(items)
-        
+
+            for item in items:
+                if "richItemRenderer" in item:
+                    video = item["richItemRenderer"].get("content", {})
+                    collected += extract_videos([video])
+                elif "itemSectionRenderer" in item:
+                    for sub in item["itemSectionRenderer"].get("contents", []):
+                        collected += extract_videos_from_item(sub)
+
+                if len(collected) >= max_results:
+                    return collected[:max_results]
+
             continuation = next(
-                (item.get("continuationItemRenderer", {}) \
-                    .get("continuationEndpoint", {}) \
-                    .get("continuationCommand", {}) \
-                    .get("token")
+                (item.get("continuationItemRenderer", {})
+                      .get("continuationEndpoint", {})
+                      .get("continuationCommand", {})
+                      .get("token")
                  for item in items if "continuationItemRenderer" in item),
                 None
             )

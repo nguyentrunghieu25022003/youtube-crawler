@@ -2,7 +2,6 @@ import httpx
 from typing import List, Dict
 from ..utils import get_youtube_api_key, get_context
 
-
 def extract_comment_continuation_token(data: dict) -> str:
     try:
         endpoints = data.get("onResponseReceivedEndpoints", [])
@@ -14,7 +13,6 @@ def extract_comment_continuation_token(data: dict) -> str:
                     .get("continuationCommand", {}) \
                     .get("token")
                 if continuation:
-                    print(continuation)
                     return continuation
     except Exception as e:
         print("Failed in onResponseReceivedEndpoints", e)
@@ -29,7 +27,6 @@ def extract_comment_continuation_token(data: dict) -> str:
                     .get("continuationCommand", {}) \
                     .get("token")
                 if continuation:
-                    print(continuation)
                     return continuation
     except Exception as e:
         print("Fallback failed:", e)
@@ -45,9 +42,12 @@ def parse_comment_entities(data: dict) -> Dict[str, Dict]:
         comment = payload.get("commentEntityPayload", {})
         props = comment.get("properties", {})
         comment_id = props.get("commentId")
+        raw_content = props.get("content", {}).get("content", "")
+        if not isinstance(raw_content, str):
+            continue
         if comment_id:
             result[comment_id] = {
-                "content": props.get("content", {}).get("content", ""),
+                "content": raw_content,
                 "author": comment.get("author", {}).get("displayName", ""),
                 "avatar": comment.get("author", {}).get("avatarThumbnailUrl", ""),
                 "published": props.get("publishedTime", {}),
@@ -76,10 +76,8 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
 
         continuation_token = extract_comment_continuation_token(data)
         if not continuation_token:
-            print("[!] No comment continuation token found in response:")
             raise Exception("No comment continuation token found")
 
-        # Step 2: Fetch comments
         while continuation_token and len(comments) < max_comments:
             payload = {
                 "context": context,
@@ -93,6 +91,7 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
 
             continuation_token = None
             actions = data.get("onResponseReceivedEndpoints", [])
+            
             for action in actions:
                 items = action.get("reloadContinuationItemsCommand", {}).get("continuationItems", []) or \
                 action.get("appendContinuationItemsAction", {}).get("continuationItems", [])
@@ -103,6 +102,8 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
                         comment_vm = thread.get("commentViewModel", {}).get("commentViewModel", {})
                         comment_id = comment_vm.get("commentId")
                         entity = entity_map.get(comment_id, {})
+                        if not entity:
+                            continue
 
                         author = entity.get("author", "")
                         avatar = entity.get("avatar")
@@ -111,6 +112,9 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
                         likes = entity.get("likes", 0)
                         reply_count = entity.get("replies", 0)
                         
+                        if not isinstance(content, str):
+                            continue
+                                
                         comment_data = {
                             "commentId": comment_id,
                             "author": author,
@@ -118,7 +122,7 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
                             "content": content,
                             "published": published,
                             "likes": likes,
-                            "replies": reply_count
+                            "repliesCount": reply_count,
                         }
 
                         comments.append(comment_data)
