@@ -16,12 +16,13 @@ def extract_live_videos(items: List[Dict]) -> List[Dict]:
                 video["shortViewCountText"].get("runs", [{}])[0].get("text", "")
                  
         videos.append({
-            "videoId": video.get("videoId"),
+            "video_id": video.get("videoId"),
             "title": video.get("title", {}).get("runs", [{}])[0].get("text", ""),
-            "channel": video.get("ownerText", {}).get("runs", [{}])[0].get("text", ""),
+            "thumbnail": video.get("thumbnail", {}).get("thumbnails", []),
+            "channel_name": video.get("ownerText", {}).get("runs", [{}])[0].get("text", ""),
             "url": f"https://www.youtube.com/watch?v={video.get('videoId')}",
-            "viewCount": view_count,
-            "isLive": True
+            "views": view_count,
+            "is_live": True
         })
     return videos
 

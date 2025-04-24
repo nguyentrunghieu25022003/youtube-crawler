@@ -50,7 +50,7 @@ def parse_comment_entities(data: dict) -> Dict[str, Dict]:
                 "content": raw_content,
                 "author": comment.get("author", {}).get("displayName", ""),
                 "avatar": comment.get("author", {}).get("avatarThumbnailUrl", ""),
-                "published": props.get("publishedTime", {}),
+                "published_time": props.get("publishedTime", {}),
                 "likes": int(comment.get("toolbar", {}).get("likeCountLiked") or 0),
                 "replies": int(comment.get("toolbar", {}).get("replyCount") or 0)
             }
@@ -116,13 +116,13 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
                             continue
                                 
                         comment_data = {
-                            "commentId": comment_id,
+                            "comment_id": comment_id,
                             "author": author,
                             "avatar": avatar,
                             "content": content,
-                            "published": published,
+                            "published_time": published,
                             "likes": likes,
-                            "repliesCount": reply_count,
+                            "replies_count": reply_count,
                         }
 
                         comments.append(comment_data)

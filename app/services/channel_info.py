@@ -37,12 +37,12 @@ def parse_channel_info(data):
         pass
 
     return {
-        "channelId": metadata.get("externalId"),
-        "channelName": metadata.get("title"),
+        "channel_id": metadata.get("externalId"),
+        "channel_name": metadata.get("title"),
         "handle": handle,
         "avatar": avatar,
         "banner": banner,
-        "subscriberCount": subscribers,
+        "subscriber_count": subscribers,
         "description": metadata.get("description", "")
     }
 

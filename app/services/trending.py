@@ -7,14 +7,16 @@ def extract_videos(items: List[Dict]) -> List[Dict]:
     results = []
     for item in items:
         video = item.get("videoRenderer") or item.get("gridVideoRenderer")
+ 
         if not video:
             continue
         results.append({
-            "videoId": video.get("videoId"),
+            "video_id": video.get("videoId"),
             "title": video.get("title", {}).get("runs", [{}])[0].get("text", ""),
-            "channel": video.get("shortBylineText", {}).get("runs", [{}])[0].get("text", ""),
-            "viewCount": video.get("shortViewCountText", {}).get("simpleText", ""),
-            "published": video.get("publishedTimeText", {}).get("simpleText", ""),
+            "thumbnail": video.get("thumbnail", {}).get("thumbnails", []),
+            "channel_name": video.get("shortBylineText", {}).get("runs", [{}])[0].get("text", ""),
+            "views": video.get("shortViewCountText", {}).get("simpleText", ""),
+            "published_time": video.get("publishedTimeText", {}).get("simpleText", ""),
             "url": f"https://www.youtube.com/watch?v={video.get('videoId')}"
         })
     return results
@@ -76,7 +78,6 @@ async def get_trending_videos(
                 if len(collected) >= max_results:
                     return collected[:max_results]
 
-            # Continuation token sau trang đầu
             continuation = next(
                 (section.get("continuationItemRenderer", {})
                         .get("continuationEndpoint", {})

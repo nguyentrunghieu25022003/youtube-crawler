@@ -203,9 +203,9 @@ async def get_videos_from_playlist(playlist_id: str, proxy: str = None) -> List[
                 if "playlistVideoRenderer" in item:
                     renderer = item["playlistVideoRenderer"]
                     videos.append({
-                        "videoId": renderer.get("videoId"),
+                        "video_id": renderer.get("videoId"),
                         "title": extract_title(renderer.get("title", {})),
-                        "publishedTime": renderer.get("publishedTimeText", {}).get("simpleText", ""),
+                        "published_time": renderer.get("publishedTimeText", {}).get("simpleText", ""),
                         "duration": renderer.get("lengthText", {}).get("simpleText", ""),
                         "thumbnail": renderer.get("thumbnail", {}).get("thumbnails", [{}])[-1].get("url", "")
                     })

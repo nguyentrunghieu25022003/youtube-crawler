@@ -11,11 +11,11 @@ def extract_videos_from_search(items: List[Dict]) -> List[Dict]:
         if not video:
             continue
         results.append({
-            "videoId": video.get("videoId"),
+            "video_id": video.get("videoId"),
             "title": video.get("title", {}).get("runs", [{}])[0].get("text", ""),
-            "channel": video.get("ownerText", {}).get("runs", [{}])[0].get("text", ""),
-            "viewCount": video.get("viewCountText", {}).get("simpleText", ""),
-            "published": video.get("publishedTimeText", {}).get("simpleText", ""),
+            "channel_name": video.get("ownerText", {}).get("runs", [{}])[0].get("text", ""),
+            "views": video.get("viewCountText", {}).get("simpleText", ""),
+            "published_time": video.get("publishedTimeText", {}).get("simpleText", ""),
             "url": f"https://www.youtube.com/watch?v={video.get('videoId')}"
         })
     return results

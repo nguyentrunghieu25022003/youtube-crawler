@@ -34,12 +34,12 @@ async def get_video_detail(video_id: str, proxy: str = None):
         streaming_data = data.get("streamingData", {})
         
         return {
-            "videoId": video_details.get("videoId"),
+            "video_id": video_details.get("videoId"),
             "title": video_details.get("title"),
             "author": video_details.get("author"),
-            "lengthSeconds": video_details.get("lengthSeconds"),
-            "viewCount": video_details.get("viewCount"),
-            "isLiveContent": video_details.get("isLiveContent"),
+            "length_seconds": video_details.get("lengthSeconds"),
+            "views": video_details.get("viewCount"),
+            "is_live_content": video_details.get("isLiveContent"),
             "formats": streaming_data.get("formats", []),
-            "adaptiveFormats": streaming_data.get("adaptiveFormats", [])
+            "adaptive_formats": streaming_data.get("adaptiveFormats", [])
         }
