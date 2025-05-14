@@ -2,6 +2,53 @@ import httpx
 from typing import List, Dict
 from ..utils import get_youtube_api_key, get_context
 
+async def fetch_replies(client, continuation_token: str, context: dict) -> List[Dict]:
+    replies = []
+    API_KEY = await get_youtube_api_key()
+    URL_COMMENT = f"https://www.youtube.com/youtubei/v1/next?key={API_KEY}"
+
+    while continuation_token:
+        payload = {
+            "context": context,
+            "continuation": continuation_token
+        }
+
+        resp = await client.post(URL_COMMENT, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        print("Replies data:", data)
+
+        entity_map = parse_comment_entities(data)
+        continuation_token = None
+
+        actions = data.get("onResponseReceivedEndpoints", [])
+        for action in actions:
+            items = action.get("appendContinuationItemsAction", {}).get("continuationItems", [])
+            for item in items:
+                if "commentViewModel" in item:
+                    comment_vm = item.get("commentViewModel", {})
+                    comment_id = comment_vm.get("commentId")
+                    entity = entity_map.get(comment_id, {})
+
+                    if not entity:
+                        print(f"❗ Missing entity for reply {comment_id}")
+                        continue
+
+                    replies.append({
+                        "comment_id": comment_id,
+                        "author": entity.get("author", ""),
+                        "avatar": entity.get("avatar"),
+                        "content": entity.get("content", ""),
+                        "published_time": entity.get("published_time", ""),
+                        "likes": entity.get("likes", 0)
+                    })
+
+                elif "continuationItemRenderer" in item:
+                    continuation_token = item["continuationItemRenderer"]["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"]
+                    print("➡️ Found continuation for more replies:", continuation_token)
+
+    return replies
+
 def extract_comment_continuation_token(data: dict) -> str:
     try:
         endpoints = data.get("onResponseReceivedEndpoints", [])
@@ -50,7 +97,7 @@ def parse_comment_entities(data: dict) -> Dict[str, Dict]:
                 "content": raw_content,
                 "author": comment.get("author", {}).get("displayName", ""),
                 "avatar": comment.get("author", {}).get("avatarThumbnailUrl", ""),
-                "published_time": props.get("publishedTime", {}),
+                "published_time": props.get("publishedTime", "Unknown"),
                 "likes": int(comment.get("toolbar", {}).get("likeCountLiked") or 0),
                 "replies": int(comment.get("toolbar", {}).get("replyCount") or 0)
             }
@@ -108,7 +155,7 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
                         author = entity.get("author", "")
                         avatar = entity.get("avatar")
                         content = entity.get("content", "")
-                        published = entity.get("published", "")
+                        published = entity.get("published_time", "")
                         likes = entity.get("likes", 0)
                         reply_count = entity.get("replies", 0)
                         
@@ -123,7 +170,27 @@ async def get_video_comments(video_id: str, proxy: str = None, max_comments: int
                             "published_time": published,
                             "likes": likes,
                             "replies_count": reply_count,
+                            "replies": [],
                         }
+                        
+                        reply_token = None
+
+                        replies_data = thread.get("replies", {}).get("commentRepliesRenderer", {})
+                        contents = replies_data.get("contents", [])
+
+                        for content in contents:
+                            continuation = content.get("continuationItemRenderer", {}) \
+                                                  .get("continuationEndpoint", {}) \
+                                                  .get("continuationCommand", {}) \
+                                                  .get("token")
+ 
+                            if continuation:
+                                reply_token = continuation
+                                break 
+
+                        if reply_token:
+                            print("Fetching replies with token:", reply_token)
+                            comment_data["replies"] = await fetch_replies(client, reply_token, context)
 
                         comments.append(comment_data)
                         if len(comments) >= max_comments:

@@ -1,4 +1,3 @@
-import json
 import httpx
 from typing import List, Dict, Optional
 from ..utils import get_youtube_api_key, get_context
